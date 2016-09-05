@@ -4,14 +4,18 @@ import (
   "fmt"
   "io"
   "os"
-  "os/user"
+  "regexp"
   "sort"
   "strings"
   "stubwatch/hublib"
   "text/tabwriter"
+  "stubwatch/config"
   "github.com/alecthomas/kingpin"
   "github.com/bobappleyard/readline"
+  "github.com/jdrivas/sl"
+  "github.com/mgutz/ansi"
   "github.com/spf13/viper"
+  "github.com/Sirupsen/logrus"
 )
 var (
 
@@ -20,18 +24,37 @@ var (
   exit *kingpin.CmdClause
   quit *kingpin.CmdClause
   verboseCmd *kingpin.CmdClause
+  debugCmd *kingpin.CmdClause
   verbose bool
+  debug bool
   testString []string
 
   searchCmd *kingpin.CmdClause
   searchEventsCmd *kingpin.CmdClause
-  searchStringArg string
+  searchStringsArg []string
 
   describeCmd *kingpin.CmdClause
   describeListingsCmd *kingpin.CmdClause
   describeZonesCmd *kingpin.CmdClause
   describeSectionsCmd *kingpin.CmdClause
   eventIdArg int
+
+)
+
+// Text Coloring
+var (
+  nullColor = fmt.Sprintf("%s", "\x00\x00\x00\x00\x00\x00\x00")
+  defaultColor = fmt.Sprintf("%s%s", "\x00\x00", ansi.ColorCode("default"))
+  emphColor = fmt.Sprintf(ansi.ColorCode("default+b"))
+  emphBlueColor = fmt.Sprintf(ansi.ColorCode("blue+b"))
+  highlightColor = fmt.Sprintf(ansi.ColorCode("red+b"))
+  listColorA = fmt.Sprintf(ansi.ColorCode("blue"))
+  listColorB = fmt.Sprintf(ansi.ColorCode("green"))
+  resetColor = fmt.Sprintf(ansi.ColorCode("reset"))
+)
+
+var(
+  log = sl.New()
 )
 
 func init() {
@@ -40,12 +63,13 @@ func init() {
 
   // state
   verboseCmd = app.Command("verbose", "toggle verbose mode.")
+  debugCmd = app.Command("debug", "toggle debug mode.")
   exit = app.Command("exit", "exit the program. <ctrl-D> works too.")
   quit = app.Command("quit", "exit the program.")
 
   searchCmd = app.Command("search","Search stubhub.")
   searchEventsCmd = searchCmd.Command("events", "Search for events that match the search-string")
-  searchEventsCmd.Arg("search-string", "What to sarch for.").Required().StringVar(&searchStringArg)
+  searchEventsCmd.Arg("search-string", "What to sarch for.").Required().StringsVar(&searchStringsArg)
 
 
   describeCmd = app.Command("describe", "More detail on events")
@@ -56,9 +80,6 @@ func init() {
   describeSectionsCmd = describeCmd.Command("sections", "describe section stats for the event.")
   describeSectionsCmd.Arg("event-id","Get section stats for this event.").Required().IntVar(&eventIdArg)
 
-  // keyValueCmd = app.Command("kv", "Test key value args.")
-  // keyValueCmd.Arg("key value", "Test for key values pairs.").StringMapVar(&keyValues)
-  initializeConfig()
 }
 
 
@@ -82,6 +103,7 @@ func DoICommand(line string, creds hublib.StubHubCredentials) (err error) {
   } else {
     switch command {
       case verboseCmd.FullCommand(): err = doVerbose()
+      case debugCmd.FullCommand(): err = doDebug()
       case exit.FullCommand(): err = doQuit()
       case quit.FullCommand(): err = doQuit()
       case searchEventsCmd.FullCommand(): err = doEventSearch(creds)
@@ -94,8 +116,12 @@ func DoICommand(line string, creds hublib.StubHubCredentials) (err error) {
 }
 
 func doEventSearch(creds hublib.StubHubCredentials) (err error) {
-  s := hublib.NewStubhubService(creds)
-  events, err := s.SearchEvents(searchStringArg)
+  searchTerm := combineStringsForSearch(searchStringsArg)
+  if verbose {
+    fmt.Printf("Searching on: %s\n", searchTerm)
+  }
+  s := hublib.NewStubHubService(creds)
+  events, err := s.SearchEvents(searchTerm)
   if err == nil {
     fmt.Printf("There are %d events\n", events.Count)
     w := tabwriter.NewWriter(os.Stdout, 2, 5, 2, ' ', 0)
@@ -121,7 +147,7 @@ func doEventSearch(creds hublib.StubHubCredentials) (err error) {
 }
 
 func doDescribeListings(creds hublib.StubHubCredentials) (err error) {
-  s := hublib.NewStubhubService(creds)
+  s := hublib.NewStubHubService(creds)
   listings, err := s.SearchListings(eventIdArg)
   if err == nil {
 
@@ -139,15 +165,27 @@ func doDescribeListings(creds hublib.StubHubCredentials) (err error) {
     w.Flush()
 
     // Listings (reuse the same tabwriter)
-    fmt.Fprintf(w,"Price\tQuantity\tZone\tSection\tRow\tSeats\tSplit\n")
+    // fmt.Fprintf(w,"Price\tQuantity\tZone\tSection\tRow\tSeats\tSplit\n")
+    fmt.Fprintf(w,"Price\tQuantity\tZone\tSection\tRow\tSeats\n")
     offers := listings.Listings
     sort.Sort(hublib.ByZoneSectionRowSeat(offers))
+    currentZone :=  ""
+    colorIndex := 1
+    colors := [2]string{listColorA, listColorB}
     for _, l := range offers {
       sName := l.SectionName
+      zName := l.ZoneName
       if l.DirtyTicketInd { sName = "*" + sName}
-      fmt.Fprintf(w,"%s\t%d\t%s\t%s\t%s\t%s\t%s\n",
+      if zName != currentZone {
+        currentZone = zName
+        colorIndex = (colorIndex + 1) % 2
+      }
+      // fmt.Fprintf(w,"%s\t%d\t%s\t%s\t%s\t%s\t%s\n",
+      //   l.CurrentPrice, l.Quantity, l.ZoneName, l.SectionName, 
+      //   l.Row, l.SeatNumbers, l.SplitsString())
+      fmt.Fprintf(w,"%s%s\t%d\t%s\t%s\t%s\t%s%s\n", colors[colorIndex],
         l.CurrentPrice, l.Quantity, l.ZoneName, l.SectionName, 
-        l.Row, l.SeatNumbers, l.SplitsString())
+        l.Row, l.SeatNumbers, resetColor)
     }
     w.Flush()
   }
@@ -155,7 +193,7 @@ func doDescribeListings(creds hublib.StubHubCredentials) (err error) {
 }
 
 func doDescribeZones(creds hublib.StubHubCredentials) (error) {
-  s := hublib.NewStubhubService(creds)
+  s := hublib.NewStubHubService(creds)
   zoneStats, err := s.DescribeZones(eventIdArg)
   if err == nil {
     sort.Sort(hublib.ByZone(zoneStats))
@@ -172,7 +210,7 @@ func doDescribeZones(creds hublib.StubHubCredentials) (error) {
 }
 
 func doDescribeSections(creds hublib.StubHubCredentials) (error) {
-  s := hublib.NewStubhubService(creds)
+  s := hublib.NewStubHubService(creds)
   sectionStats, err := s.DescribeSections(eventIdArg)
   if err == nil {
     sort.Sort(hublib.BySection(sectionStats))
@@ -192,6 +230,18 @@ func priceString(min, avg, med, max float64) (string) {
 }
 
 
+// var stringCombineRE = '\s+'
+func combineStringsForSearch(strs []string) (s string) {
+  cs := ""
+  for _, str := range strs {
+    cs += str + " "
+  }
+  cs = strings.TrimRight(cs, " ")
+
+  re := regexp.MustCompile("\\s+")
+  s = re.ReplaceAllString(cs, "+")
+  return s
+}
 
 // func doKeyValue() (error) {
 //   fmt.Printf("There were %d key values pairs.\n", len(keyValues))
@@ -205,31 +255,25 @@ func priceString(min, avg, med, max float64) (string) {
 //
 // Support.
 //
-const (
-  ConfigFileName = ".stubwatch"
-  ConfigFileExt = "yml"
-  StubHubApplicationTokenKey = "StubhubApplicationToken"
-)
-func initializeConfig() {
-
-  viper.SetConfigName(ConfigFileName)
-  viper.AddConfigPath(".")
-  u, err := user.Current()
-  if err == nil {
-    homePath := u.HomeDir
-    viper.AddConfigPath(homePath)
-  }
-  err = viper.ReadInConfig()
-  if err != nil {
-    fmt.Printf("Error in reading in configuration: %s\n", err)
-  }
-}
 
 func toggleVerbose() bool {
-  verbose = verbose
+  verbose = !verbose
   return verbose
 }
 
+func toggleDebug() bool {
+  debug = !debug
+  return debug
+}
+
+func doDebug() (error) {
+  if toggleVerbose() {
+    fmt.Println("Verbose is on.")
+  } else {
+    fmt.Println("Verbose is off.")
+  }
+  return nil
+}
 func doVerbose() (error) {
   if toggleVerbose() {
     fmt.Println("Verbose is on.")
@@ -266,18 +310,49 @@ func promptLoop(prompt string, process func(string) (error)) (err error) {
   return nil
 }
 
-// This gets called from the main program, presumably from the 'interactive' command on main's command line.
-func DoInteractive() {
-  if !viper.IsSet(StubHubApplicationTokenKey) {
-    fmt.Printf("ApplicationTokenString not set in credentials file: %s.%s\n", ConfigFileName, ConfigFileExt)
+func configureLogs() {
+  setFormatter()
+  updateLogLevel()
+}
+
+const (
+  jsonLog = "json"
+  textLog = "text"
+)
+
+func setFormatter() {
+  switch textLog {
+  case jsonLog:
+    f := new(logrus.JSONFormatter)
+    log.SetFormatter(f)
+    // mclib.SetLogFormatter(f)
+  case textLog:
+    f := new(sl.TextFormatter)
+    f.FullTimestamp = true
+    log.SetFormatter(f)
+    // mclib.SetLogFormatter(f)
   }
-  creds := hublib.NewStubHubCredentials(viper.GetString(StubHubApplicationTokenKey))
+}
+
+func updateLogLevel() {
+  l := logrus.InfoLevel
+  if debug || verbose {
+    l = logrus.DebugLevel
+  }
+  log.SetLevel(l)
+  // mclib.SetLogLevel(l)
+}
+
+// This gets called from the main program, presumably from the 'interactive' command on main's command line.
+func DoInteractive(v *viper.Viper) {
+  if !v.IsSet(config.StubHubApplicationTokenKey) {
+    fmt.Printf("ApplicationTokenString not set in credentials file: %s.%s\n", config.FileName, config.FileExt)
+  }
+  creds := hublib.NewStubHubCredentials(viper.GetString(config.StubHubApplicationTokenKey))
   xICommand := func(line string) (err error) {return DoICommand(line, creds)}
   prompt := "> "
   err := promptLoop(prompt, xICommand)
   if err != nil {fmt.Printf("Error - %s.\n", err)}
 }
-
-
 
 

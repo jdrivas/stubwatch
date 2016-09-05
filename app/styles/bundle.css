@@ -1,0 +1,12 @@
+html {
+  background: white;
+  font: 16px Arial;
+}
+.Logo {
+  background-image: url("../images/react.svg");
+  background-size: cover;
+  display: inline-block;
+  height: 50px;
+  vertical-align: middle;
+  width: 50px;
+}

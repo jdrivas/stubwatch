@@ -1,9 +1,14 @@
 var gulp = require('gulp');
 // requires node version >= 12
 var child = require('child_process');
+const babel = require('gulp-babel');
+const browserify = require('gulp-browserify');
 var run = require('gulp-run');
 var chalk = require('chalk')
 var util = require('gulp-util')
+var rename = require('gulp-rename')
+const rewrite = require('gulp-rewrite-css')
+const concatCss = require('gulp-concat-css')
 var readline = require('readline')
 
 var gulpProcess;
@@ -52,6 +57,35 @@ gulp.task('build', function() {
   return build;
 });
 
+const assetsSrc = 'app/assets/'
+const assetsBuild = 'app/assets/build/'
+const assetsFinal = 'app/'
+const cssFinal = assetsFinal + "styles/"
+const jsFinal = assetsFinal + "js/"
+
+gulp.task('babel', function() {
+  return gulp.src(assetsSrc + 'js/**/*.js')
+    .pipe(babel({presets: ['react', 'es2015']}))
+    .pipe(gulp.dest(assetsBuild + 'js'))
+});
+
+// Get his from the build abvove.
+gulp.task('browserify', function() {
+  return gulp.src(assetsBuild + 'js/app.js')
+  .pipe(browserify({
+    insertGlobals: true,
+    debug: true
+  }))
+  .pipe(rename('bundle.js'))
+  .pipe(gulp.dest(assetsFinal + 'js'))
+});
+
+gulp.task('css', function() {
+  var dest = cssFinal
+  return gulp.src(assetsSrc + '/css/**/*.css')
+  .pipe(concatCss("bundle.css")) // This will also rebase the URLS by default.
+  .pipe(gulp.dest(dest))
+});
 
 function doCommand(command) {
   retVal = true
@@ -103,6 +137,8 @@ function commandPromptLoop() {
 
 gulp.task('watch', function(){
   gulp.watch('**/*.go', ['newline', 'build', 'test', 'prompt']);
+  gulp.watch(assetsSrc + 'js/**/*.js', ['newline', 'babel', 'browserify', 'prompt']);
+  gulp.watch(assetsSrc + 'css/**/*.css', ['newline', 'css', 'prompt'])
   commandPromptLoop()
 })
 

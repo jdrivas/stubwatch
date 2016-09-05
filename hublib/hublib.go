@@ -9,8 +9,22 @@ import (
   "github.com/Sirupsen/logrus"
 )
 
+
 type StubHubCredentials struct {
   applicationToken string
+}
+
+var defaultCreds *StubHubCredentials
+
+func DefaultCredentials() (*StubHubCredentials, error) {
+  if defaultCreds == nil {
+    return nil, fmt.Errorf("Default Credentials are not set.")
+  }
+  return defaultCreds, nil
+}
+
+func SetDefaultCredentials(creds StubHubCredentials) {
+  defaultCreds = &creds
 }
 
 func NewStubHubCredentials(applicationToken string) (StubHubCredentials) {
@@ -26,7 +40,13 @@ type StubhubService struct {
   creds StubHubCredentials
 }
 
-func NewStubhubService(creds StubHubCredentials) (*StubhubService) {
+func NewDefaultService() (*StubhubService, error) {
+  creds, err := DefaultCredentials()
+  if err != nil { return nil, fmt.Errorf("Default Credentials are not set. Try hublib.SetDefaultCredentials()")}
+  return NewStubHubService(*creds), nil
+}
+
+func NewStubHubService(creds StubHubCredentials) (*StubhubService) {
   return &StubhubService{
     Sling: baseRequest(creds),
     creds: creds,
@@ -111,12 +131,13 @@ func (sh * StubhubService) SearchEvents(query string) (events Events, err error)
 }
 
 const listingSearchPath = "/search/inventory/v1"
+// Return better codes to enable better service response.
 func (sh *StubhubService) SearchListings(eventId int) (completeListings EventListings, err error) {
   queryParam  := defaultListingSearchQuery(eventId)
   sh.Sling = sh.Sling.Get(listingSearchPath).QueryStruct(queryParam)
 
   req, err := sh.Sling.Request()
-  if err != nil { return completeListings, err }
+  if err != nil { return completeListings, err } // 400?
   f := requestLogFields(req)
   f["eventID"] = eventId
   f["requestNo"] = 0

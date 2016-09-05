@@ -1,0 +1,24 @@
+{{define "content"}}
+<H2>Event {{.Listings.EventID}} Total Listings: {{.Listings.TotalListings}} TotalTickets: {{ .Listings.TotalTickets }}</H2>
+<table>
+  <tr>
+    <th>Price</th>
+    <th>Quantity</th>
+    <th>Zone</th>
+    <th>Section</th>
+    <th>Row</th>
+    <th>Seats</th>
+  </tr>
+  {{range .Listings.Listings}}
+    <tr>
+      <td> {{.ListingID}} </td>
+      <td> {{.Quantity}} </td>
+      <td> {{.ZoneName}} </td>
+      <td> {{.SectionName}}</td>
+      <td> {{.Row}} </td>
+      <td> {{.SeatNumbers }} </td>
+    <tr>
+  {{end}}
+</table>
+{{end}}
+

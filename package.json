@@ -8,16 +8,27 @@
   },
   "repository": {
     "type": "git",
-    "url": "https://github.com/jdrivas/ecs-craft.git"
+    "url": "https://github.com/jdrivas/stubwatch.git"
   },
-  "author": "",
-  "homepage": "https://github.com/jdrivas/ecs-craft",
+  "author": "David Rivas",
+  "homepage": "https://github.com/jdrivas/stubwatch",
+  "dependencies": {
+    "react": "",
+    "react-dom": "",
+    "babel-preset-react": "",
+    "babel-preset-es2015": ""
+  },
   "devDependencies": {
     "gulp": "",
     "gulper": "",
     "gulp-prompt": "",
     "gulp-run": "",
     "gulp-util": "",
+    "gulp-rename": "",
+    "gulp-rewrite-css": "",
+    "gulp-concat-css": "",
+    "gulp-babel": "",
+    "gulp-browserify": "",
     "console-stream": "",
     "chalk": "",
     "synchro-prompt": ""
