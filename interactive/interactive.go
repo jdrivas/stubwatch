@@ -7,6 +7,7 @@ import (
   "regexp"
   "sort"
   "strings"
+  "time"
   "stubwatch/hublib"
   "text/tabwriter"
   "stubwatch/config"
@@ -117,29 +118,39 @@ func DoICommand(line string, creds hublib.StubHubCredentials) (err error) {
 
 func doEventSearch(creds hublib.StubHubCredentials) (err error) {
   searchTerm := combineStringsForSearch(searchStringsArg)
+  searchStringsArg = []string{}
   if verbose {
     fmt.Printf("Searching on: %s\n", searchTerm)
   }
   s := hublib.NewStubHubService(creds)
   events, err := s.SearchEvents(searchTerm)
+
+  sort.Sort(hublib.EventsByDate(events.Events))
   if err == nil {
     fmt.Printf("There are %d events\n", events.Count)
     w := tabwriter.NewWriter(os.Stdout, 2, 5, 2, ' ', 0)
-    for i, event := range events.Events {
-      fmt.Fprintf(w, "%d. ********************\n", i+1)
-      fmt.Fprintf(w, "%d %s\t\t%s %.0f\n", event.ID, event.Name, event.DateLocal, event.Distance)
-      performers := event.Ancestors.Performers
-      fmt.Fprintf(w, "Performers: ")
-      for _, p := range performers {
-        fmt.Fprintf(w, "%s ", p.Name)
-      }
-      fmt.Fprintln(w)
+    fmt.Fprintf(w, "ID\tName\tVenue\tDate\n")
+    for _, event := range events.Events {
+      fmt.Fprintf(w,"%d\t%s\t%s\t%s\n",
+        event.ID, event.Name, event.Venue.Name, 
+        // event.DateUTC,
+        event.Date().Local().Format(time.RFC1123),
+      )
+      // fmt.Fprintf(w, "%d. ********************\n", i+1)
+      // fmt.Fprintf(w, "%d %s\t\t%s %.0f\n", event.ID, event.Name, event.DateLocal, event.Distance)
+
+      // performers := event.Ancestors.Performers
+      // fmt.Fprintf(w, "Performers: ")
+      // for _, p := range performers {
+        // fmt.Fprintf(w, "%s ", p.Name)
+      // }
+      // fmt.Fprintln(w)
       // ti := event.TicketInfo
       // fmt.Fprintf(w, "%d\t%g\t%g\n", ti.TotalTickets, ti.MinPrice, ti.MaxPrice)
-      v := event.Venue
-      fmt.Fprintf(w, "%s\t%s, %s\n", v.Name, v.City, v.State)
-      fmt.Fprintf(w, "Description: ")
-      fmt.Fprintf(w, "%s\n", event.Description)
+      // v := event.Venue
+      // fmt.Fprintf(w, "%s\t%s, %s\n", v.Name, v.City, v.State)
+      // fmt.Fprintf(w, "Description: ")
+      // fmt.Fprintf(w, "%s\n", event.Description)
     }
     w.Flush()
   }

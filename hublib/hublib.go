@@ -117,11 +117,13 @@ func requestLogFields(req *http.Request) (f logrus.Fields) {
 // TODO: This query string should probably be made clean.
 const eventSearchPath = "/search/catalog/events/v3"
 func (sh * StubhubService) SearchEvents(query string) (events Events, err error) {
-  queryParam := &EventSearchQuery{Search: query}
+  // queryParam := &EventSearchQuery{Search: query}
+  queryParam := defaultEventSearchQuery(query)
   sh.Sling = sh.Sling.Get(eventSearchPath).QueryStruct(queryParam)
 
   req, err := sh.Sling.Request()
   if err != nil { return Events{}, err }
+
   f := requestLogFields(req)
   f["query"] = query
   log.Debug(f, "Request for the SearchCommand")
@@ -130,6 +132,9 @@ func (sh * StubhubService) SearchEvents(query string) (events Events, err error)
   return events, err
 }
 
+
+// TODO: Need to refactor to get the javascript all combined or the go object.
+// So do the JSON decoding outside of this loop.
 const listingSearchPath = "/search/inventory/v1"
 // Return better codes to enable better service response.
 func (sh *StubhubService) SearchListings(eventId int) (completeListings EventListings, err error) {

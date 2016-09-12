@@ -1,11 +1,24 @@
 package hublib
 
+import(
+  "strings"
+  "time"
+  "github.com/Sirupsen/logrus"
+)
 
 type EventSearchQuery struct {
   Search string             `url:"q,omitempty"`
   Name string               `url:"name,omitempty"`
   Rows int                  `url:"rows,omitempty"`
   Parking bool              `url:"parking,omitempty"`
+}
+
+func defaultEventSearchQuery(query string) (lsq *EventSearchQuery) {
+    return &EventSearchQuery{
+      Search: query,
+      Rows: 500,
+      Parking: false,
+    }
 }
 
 type Events struct {
@@ -31,7 +44,22 @@ type Event struct {
   DisplayAttributes       `json:"displayAttributes"`
 }
 
+func (e Event) Date() (time.Time) {
+  ds := strings.Replace(e.DateLocal,"+","Z", -1)
+  t, err := time.Parse("2006-01-02T15:04:05-0700", ds)
+  if err != nil {
+    log.Debug(logrus.Fields{"ds": ds, "error": err,}, "Failed to make a date.")
+    return time.Unix(0,0)
+  }
+  return t
+}
 
+// TODO: I know this is still the right way.
+type EventsByDate []Event
+
+func (a EventsByDate) Len() int { return len(a) }
+func (a EventsByDate) Swap(i, j int ) { a[i], a[j] = a[j], a[i] }
+func (a EventsByDate) Less( i, j int ) bool { return a[i].Date().Before(a[j].Date()) }
 
 type Venue struct {
   ID int                  `json:"id"`
